@@ -8,6 +8,7 @@ import sys
 import tqdm
 import torch
 import argparse
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -28,12 +29,12 @@ torch.backends.cudnn.allow_tf32 = False
 def _args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', '-c',     type=str,            default='configs/InSPyReNet_SwinB.yaml')
-    parser.add_argument('--source', '-s',     type=str)
+    parser.add_argument('--source', '-s',     type=str,)
     parser.add_argument('--dest', '-d',       type=str,            default=None)
     parser.add_argument('--type', '-t',       type=str,            default='map')
-    parser.add_argument('--gpu', '-g',        action='store_true', default=False)
+    parser.add_argument('--gpu', '-g',        action='store_true', default=True)
     parser.add_argument('--jit', '-j',        action='store_true', default=False)
-    parser.add_argument('--verbose', '-v',    action='store_true', default=False)
+    parser.add_argument('--verbose', '-v',    action='store_true', default=True)
     return parser.parse_args()
 
 def get_format(source):
@@ -49,7 +50,22 @@ def get_format(source):
     else:
         return ''
 
-def inference(opt, args):
+def parse_args_as_parameter(config='configs/InSPyReNet_SwinB.yaml', source="test.JPG", dest="./output", arg_type='rgba', gpu=True, jit=False, verbose=True):
+    args_dict = {
+        'config': config,
+        'source': source,
+        'dest': dest,
+        'type': arg_type,
+        'gpu': gpu,
+        'jit': jit,
+        'verbose': verbose
+    }
+
+    # Return as a SimpleNamespace to allow dot notation
+    return SimpleNamespace(**args_dict)
+
+def inference(args):
+    opt = load_config(args.config)
     model = eval(opt.Model.name)(**opt.Model)
     model.load_state_dict(torch.load(os.path.join(
         opt.Test.Checkpoint.checkpoint_dir, 'latest.pth'), map_location=torch.device('cpu')), strict=True)
@@ -89,7 +105,7 @@ def inference(opt, args):
         os.makedirs(save_dir, exist_ok=True)
     
     sample_list = eval(_format + 'Loader')(args.source, opt.Test.Dataset.transforms)
-
+    # print("property",eval.__class__)
     if args.verbose is True:
         samples = tqdm.tqdm(sample_list, desc='Inference', total=len(
             sample_list), position=0, leave=False, bar_format='{desc:<30}{percentage:3.0f}%|{bar:50}{r_bar}')
@@ -100,14 +116,14 @@ def inference(opt, args):
     background = None
 
     for sample in samples:
-        if _format == 'Video' and writer is None:
-            writer = cv2.VideoWriter(os.path.join(save_dir, sample['name'] + '.mp4'), cv2.VideoWriter_fourcc(*'mp4v'), sample_list.fps, sample['shape'][::-1])
-            samples.total += int(sample_list.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if _format == 'Video' and sample['image'] is None:
-            if writer is not None:
-                writer.release()
-            writer = None
-            continue
+        # if _format == 'Video' and writer is None:
+        #     writer = cv2.VideoWriter(os.path.join(save_dir, sample['name'] + '.mp4'), cv2.VideoWriter_fourcc(*'mp4v'), sample_list.fps, sample['shape'][::-1])
+        #     samples.total += int(sample_list.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # if _format == 'Video' and sample['image'] is None:
+        #     if writer is not None:
+        #         writer.release()
+        #     writer = None
+        #     continue
         
         if args.gpu is True:
             sample = to_cuda(sample)
@@ -126,14 +142,7 @@ def inference(opt, args):
             img = (np.stack([pred] * 3, axis=-1) * 255).astype(np.uint8)
         elif args.type == 'rgba':
             r, g, b = cv2.split(img)
-            pred *= pred
-            pred *= pred
             pred = (pred * 255).astype(np.uint8)
-
-            pred[pred >= 253.0] = 255
-            pred[pred < 5.0] = 0
-            pred = pred.astype(np.uint8)
-            
             img = cv2.merge([r, g, b, pred])
         elif args.type == 'green':
             bg = np.stack([np.ones_like(pred)] * 3, axis=-1) * [120, 255, 155]
@@ -167,12 +176,14 @@ def inference(opt, args):
         
         if _format == 'Image':
             Image.fromarray(img).save(os.path.join(save_dir, sample['name'] + '.png'))
-        elif _format == 'Video' and writer is not None:
-            writer.write(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        elif _format == 'Webcam':
-            cv2.imshow('InSPyReNet', img)
+        # elif _format == 'Video' and writer is not None:
+        #     writer.write(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        # elif _format == 'Webcam':
+        #     cv2.imshow('InSPyReNet', img)
 
 if __name__ == "__main__":
-    args = _args()
-    opt = load_config(args.config)
-    inference(opt, args)
+    # args = _args()
+    args = parse_args_as_parameter()
+    # opt = load_config(args.config)
+    # inference(opt, args)
+    inference(args)

@@ -7,6 +7,11 @@ from operator import xor
 from typing import Optional
 
 from lib.modules.layers import *
+
+# import pathlib,sys
+# if str(pathlib.Path(__file__).parent) not in sys.path:
+#     sys.path.insert(0, str(pathlib.Path(__file__).parent))
+
 from utils.misc import *
 class SICA(nn.Module):
     def __init__(self, in_channel, out_channel=1, depth=64, base_size=None, stage=None, lmap_in=False):
